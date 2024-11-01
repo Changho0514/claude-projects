@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>타워 디펜스 게임</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+        }
+        #gameStats {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #towerButtons {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2b5797;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="gameStats">
+            생명력: <span id="lives">10</span> | 
+            골드: <span id="gold">100</span> |
+            웨이브: <span id="wave">1</span>
+        </div>
+    </div>
+    <div id="towerButtons">
+        <button onclick="selectTower('basic')">기본 타워 (50골드)</button>
+        <button onclick="selectTower('sniper')">저격 타워 (100골드)</button>
+        <button onclick="selectTower('splash')">스플래시 타워 (150골드)</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 게임 상태
+        let lives = 10;
+        let gold = 100;
+        let wave = 1;
+        let enemies = [];
+        let towers = [];
+        let projectiles = [];
+        let selectedTower = null;
+        let gameLoop = null;
+        let enemySpawnTimer = 0;
+
+        // 경로 정의
+        const path = [
+            {x: 0, y: 300},
+            {x: 200, y: 300},
+            {x: 200, y: 150},
+            {x: 600, y: 150},
+            {x: 600, y: 450},
+            {x: 800, y: 450}
+        ];
+
+        // 타워 타입 정의
+        const towerTypes = {
+            basic: {
+                cost: 50,
+                range: 100,
+                damage: 20,
+                fireRate: 1000,
+                color: '#4285f4',
+                projectileColor: '#4285f4'
+            },
+            sniper: {
+                cost: 100,
+                range: 200,
+                damage: 60,
+                fireRate: 2000,
+                color: '#ea4335',
+                projectileColor: '#ea4335'
+            },
+            splash: {
+                cost: 150,
+                range: 80,
+                damage: 30,
+                fireRate: 1500,
+                color: '#34a853',
+                projectileColor: '#34a853'
+            }
+        };
+
+        // 마우스 위치 추적
+        let mouseX = 0;
+        let mouseY = 0;
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        // 타워 배치
+        canvas.addEventListener('click', () => {
+            if (selectedTower && gold >= towerTypes[selectedTower].cost) {
+                const tower = {
+                    x: mouseX,
+                    y: mouseY,
+                    type: selectedTower,
+                    lastShot: 0,
+                    ...towerTypes[selectedTower]
+                };
+                
+                // 경로 위에 타워를 놓을 수 없음
+                if (!isOnPath(mouseX, mouseY)) {
+                    towers.push(tower);
+                    gold -= tower.cost;
+                    updateStats();
+                }
+            }
+        });
+
+        function selectTower(type) {
+            selectedTower = type;
+        }
+
+        function isOnPath(x, y) {
+            for (let i = 0; i < path.length - 1; i++) {
+                const start = path[i];
+                const end = path[i + 1];
+                const distance = distanceToSegment(x, y, start.x, start.y, end.x, end.y);
+                if (distance < 30) return true;
+            }
+            return false;
+        }
+
+        function distanceToSegment(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+            
+            const dot = A * C + B * D;
+            const len_sq = C * C + D * D;
+            let param = -1;
+            
+            if (len_sq !== 0)
+                param = dot / len_sq;
+            
+            let xx, yy;
+            
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+            
+            const dx = px - xx;
+            const dy = py - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function spawnEnemy() {
+            const enemy = {
+                x: path[0].x,
+                y: path[0].y,
+                health: 50 * wave,
+                maxHealth: 50 * wave,
+                speed: 2,
+                pathIndex: 0,
+                value: 10 + wave * 5
+            };
+            enemies.push(enemy);
+        }
+
+        function moveEnemies() {
+            enemies.forEach(enemy => {
+                const targetPoint = path[enemy.pathIndex + 1];
+                if (!targetPoint) return;
+
+                const dx = targetPoint.x - enemy.x;
+                const dy = targetPoint.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < enemy.speed) {
+                    enemy.pathIndex++;
+                    if (enemy.pathIndex >= path.length - 1) {
+                        lives--;
+                        enemies = enemies.filter(e => e !== enemy);
+                        updateStats();
+                        if (lives <= 0) gameOver();
+                    }
+                } else {
+                    enemy.x += (dx / distance) * enemy.speed;
+                    enemy.y += (dy / distance) * enemy.speed;
+                }
+            });
+        }
+
+        function updateTowers() {
+            const currentTime = Date.now();
+            towers.forEach(tower => {
+                if (currentTime - tower.lastShot >= tower.fireRate) {
+                    const target = findNearestEnemy(tower);
+                    if (target) {
+                        shoot(tower, target);
+                        tower.lastShot = currentTime;
+                    }
+                }
+            });
+        }
+
+        function findNearestEnemy(tower) {
+            let nearest = null;
+            let shortestDistance = tower.range;
+            
+            enemies.forEach(enemy => {
+                const dx = enemy.x - tower.x;
+                const dy = enemy.y - tower.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < shortestDistance) {
+                    shortestDistance = distance;
+                    nearest = enemy;
+                }
+            });
+            
+            return nearest;
+        }
+
+        function shoot(tower, enemy) {
+            projectiles.push({
+                x: tower.x,
+                y: tower.y,
+                targetX: enemy.x,
+                targetY: enemy.y,
+                speed: 5,
+                damage: tower.damage,
+                color: tower.projectileColor,
+                target: enemy,
+                type: tower.type
+            });
+        }
+
+        function updateProjectiles() {
+            projectiles.forEach(projectile => {
+                const dx = projectile.targetX - projectile.x;
+                const dy = projectile.targetY - projectile.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < projectile.speed) {
+                    if (projectile.type === 'splash') {
+                        // 스플래시 데미지
+                        enemies.forEach(enemy => {
+                            const splashDx = enemy.x - projectile.targetX;
+                            const splashDy = enemy.y - projectile.targetY;
+                            const splashDistance = Math.sqrt(splashDx * splashDx + splashDy * splashDy);
+                            if (splashDistance < 50) {
+                                damageEnemy(enemy, projectile.damage);
+                            }
+                        });
+                    } else {
+                        damageEnemy(projectile.target, projectile.damage);
+                    }
+                    projectiles = projectiles.filter(p => p !== projectile);
+                } else {
+                    projectile.x += (dx / distance) * projectile.speed;
+                    projectile.y += (dy / distance) * projectile.speed;
+                }
+            });
+        }
+
+        function damageEnemy(enemy, damage) {
+            enemy.health -= damage;
+            if (enemy.health <= 0) {
+                enemies = enemies.filter(e => e !== enemy);
+                gold += enemy.value;
+                updateStats();
+            }
+        }
+
+        function draw() {
+            // 배경 지우기
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 경로 그리기
+            ctx.beginPath();
+            ctx.moveTo(path[0].x, path[0].y);
+            path.forEach(point => ctx.lineTo(point.x, point.y));
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 40;
+            ctx.stroke();
+
+            // 적 그리기
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, 15, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0000';
+                ctx.fill();
+
+                // 체력바 그리기
+                const healthBarWidth = 30;
+                const healthPercentage = enemy.health / enemy.maxHealth;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(enemy.x - healthBarWidth/2, enemy.y - 20, healthBarWidth, 5);
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(enemy.x - healthBarWidth/2, enemy.y - 20, healthBarWidth * healthPercentage, 5);
+            });
+
+            // 타워 그리기
+            towers.forEach(tower => {
+                ctx.beginPath();
+                ctx.arc(tower.x, tower.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = tower.color;
+                ctx.fill();
+            });
+
+            // 발사체 그리기
+            projectiles.forEach(projectile => {
+                ctx.beginPath();
+                ctx.arc(projectile.x, projectile.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = projectile.color;
+                ctx.fill();
+            });
+
+            // 타워 배치 미리보기
+            if (selectedTower) {
+                ctx.beginPath();
+                ctx.arc(mouseX, mouseY, 20, 0, Math.PI * 2);
+                ctx.fillStyle = isOnPath(mouseX, mouseY) ? 'rgba(255, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)';
+                ctx.fill();
+
+                // 범위 표시
+                ctx.beginPath();
+                ctx.arc(mouseX, mouseY, towerTypes[selectedTower].range, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.stroke();
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('lives').textContent = lives;
+            document.getElementById('gold').textContent = gold;
+            document.getElementById('wave').textContent = wave;
+        }
+
+        function gameOver() {
+            clearInterval(gameLoop);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('게임 오버!', canvas.width/2, canvas.height/2);
+        }
+
+        function update() {
+            enemySpawnTimer++;
+            if (enemySpawnTimer >= 60 && enemies.length < 10) {
+                spawnEnemy();
+                enemySpawnTimer = 0;
+            }
+
+            if (enemies.length === 0 && enemySpawnTimer >= 180) {
+                wave++;
+                updateStats();
+                enemySpawnTimer = 0;
+            }
+
+            moveEnemies();
+            updateTowers();
+            updateProjectiles();
+            draw();
+        }
+
+        // 게임 시작
+        gameLoop = setInterval(update, 1000/60);
+        updateStats();
+    </script>
+</body>
+</html>
+
+이거
