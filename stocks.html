@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>주가 예측 게임</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            color: #333;
+        }
+        .game-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 300px;
+            text-align: center;
+        }
+        button {
+            padding: 10px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .status {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>주가 예측 게임</h1>
+    <div class="game-container">
+        <p>현재 주가: <span id="current-price"></span></p>
+        <p>다음 주가가 상승할까요, 하락할까요?</p>
+        <button onclick="predict('up')">상승</button>
+        <button onclick="predict('down')">하락</button>
+        <div class="status" id="status"></div>
+        <div class="status">점수: <span id="score">0</span></div>
+    </div>
+
+    <script>
+        // 초기 변수 설정
+        let currentPrice = Math.floor(Math.random() * 100) + 50; // 50 ~ 150 사이의 초기 가격 설정
+        let score = 0;
+
+        // 현재 주가 표시
+        document.getElementById('current-price').innerText = currentPrice;
+
+        // 예측 함수
+        function predict(prediction) {
+            const nextPrice = currentPrice + Math.floor(Math.random() * 21) - 10; // -10 ~ +10의 변동
+            const isUp = nextPrice > currentPrice;
+
+            // 예측 결과 확인
+            if ((prediction === 'up' && isUp) || (prediction === 'down' && !isUp)) {
+                score += 10;
+                document.getElementById('status').innerText = "정답입니다! 주가가 " + (isUp ? "상승" : "하락") + "했습니다.";
+            } else {
+                score -= 5;
+                document.getElementById('status').innerText = "틀렸습니다. 주가가 " + (isUp ? "상승" : "하락") + "했습니다.";
+            }
+
+            // 다음 라운드를 위한 값 업데이트
+            currentPrice = nextPrice;
+            document.getElementById('current-price').innerText = currentPrice;
+            document.getElementById('score').innerText = score;
+        }
+    </script>
+</body>
+</html>
