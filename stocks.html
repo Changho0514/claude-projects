@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>주가 예측 게임</title>
+    <title>주가 예측 게임 - KOSPI 지수</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -38,86 +38,144 @@
             max-width: 600px;
             margin-top: 20px;
         }
+        .analysis-page {
+            display: none;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 400px;
+            text-align: center;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
-    <h1>주가 예측 게임</h1>
+    <h1>주가 예측 게임 - KOSPI 지수</h1>
     <div class="game-container">
-        <p>현재 주가: <span id="current-price"></span></p>
-        <p>다음 주가가 상승할까요, 하락할까요?</p>
+        <p>현재 KOSPI 지수 (랜덤 날짜): <span id="current-price"></span></p>
+        <p>다음 지수가 상승할까요, 하락할까요?</p>
         <button onclick="predict('up')">상승</button>
         <button onclick="predict('down')">하락</button>
         <div class="status" id="status"></div>
         <div class="status">점수: <span id="score">0</span></div>
+        <div class="status">정확도: <span id="accuracy">0%</span></div>
+        <button onclick="toggleAnalysisPage()">예측 기록 및 분석 보기</button>
     </div>
 
     <div id="chartContainer">
         <canvas id="priceChart"></canvas>
     </div>
 
+    <div class="analysis-page" id="analysisPage">
+        <h2>예측 기록 및 분석</h2>
+        <ul id="predictionLog"></ul>
+        <button onclick="toggleAnalysisPage()">닫기</button>
+    </div>
+
     <script>
+        // 과거 KOSPI 지수 데이터 (날짜, 지수)
+        const kospiData = [
+            { date: "2023-01-01", value: 2450 },
+            { date: "2023-01-02", value: 2460 },
+            { date: "2023-01-03", value: 2440 },
+            { date: "2023-01-04", value: 2475 },
+            { date: "2023-01-05", value: 2430 },
+            { date: "2023-01-06", value: 2425 },
+            { date: "2023-01-07", value: 2490 },
+            { date: "2023-01-08", value: 2480 },
+            { date: "2023-01-09", value: 2500 },
+            { date: "2023-01-10", value: 2510 },
+            // 추가 데이터가 필요하면 여기에 계속 입력
+        ];
+
         // 초기 변수 설정
-        let currentPrice = Math.floor(Math.random() * 100) + 50;
         let score = 0;
-        let priceHistory = [currentPrice];
-        
-        // 현재 주가 표시
-        document.getElementById('current-price').innerText = currentPrice;
+        let correctPredictions = 0;
+        let totalPredictions = 0;
+        let priceHistory = [];
+        let predictionLog = [];
+        let currentIndex = 0;
 
         // 차트 생성
         const ctx = document.getElementById('priceChart').getContext('2d');
         const priceChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: Array.from({length: priceHistory.length}, (_, i) => i + 1),
-                datasets: [{
-                    label: '주가',
-                    data: priceHistory,
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    fill: false,
-                    borderWidth: 2
-                }, {
-                    label: '이동 평균 (5일)',
-                    data: calculateMovingAverage(priceHistory, 5),
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    fill: false,
-                    borderDash: [5, 5],
-                    borderWidth: 2
-                }]
+                labels: [],
+                datasets: [
+                    {
+                        label: 'KOSPI 지수',
+                        data: priceHistory,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        fill: false,
+                        borderWidth: 2
+                    },
+                    {
+                        label: '이동 평균 (5일)',
+                        data: calculateMovingAverage(priceHistory, 5),
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        fill: false,
+                        borderDash: [5, 5],
+                        borderWidth: 2
+                    }
+                ]
             },
             options: {
                 scales: {
                     x: { title: { display: true, text: '날짜' } },
-                    y: { title: { display: true, text: '주가' } }
+                    y: { title: { display: true, text: '지수' } }
                 }
             }
         });
 
+        // 새로운 KOSPI 지수 설정 (랜덤 날짜 선택)
+        function setNewPrice() {
+            currentIndex = Math.floor(Math.random() * kospiData.length);
+            const currentData = kospiData[currentIndex];
+            priceHistory.push(currentData.value);
+            document.getElementById('current-price').innerText = `${currentData.value} (${currentData.date})`;
+            updateChart();
+        }
+
         // 예측 함수
         function predict(prediction) {
-            const nextPrice = currentPrice + Math.floor(Math.random() * 21) - 10; // -10 ~ +10의 변동
-            const isUp = nextPrice > currentPrice;
+            const nextIndex = currentIndex + 1 < kospiData.length ? currentIndex + 1 : currentIndex;
+            const nextPrice = kospiData[nextIndex].value;
+            const isUp = nextPrice > kospiData[currentIndex].value;
 
-            // 예측 결과 확인
+            totalPredictions++;
             if ((prediction === 'up' && isUp) || (prediction === 'down' && !isUp)) {
+                correctPredictions++;
                 score += 10;
-                document.getElementById('status').innerText = "정답입니다! 주가가 " + (isUp ? "상승" : "하락") + "했습니다.";
+                document.getElementById('status').innerText = "정답입니다! KOSPI 지수가 " + (isUp ? "상승" : "하락") + "했습니다.";
             } else {
                 score -= 5;
-                document.getElementById('status').innerText = "틀렸습니다. 주가가 " + (isUp ? "상승" : "하락") + "했습니다.";
+                document.getElementById('status').innerText = "틀렸습니다. KOSPI 지수가 " + (isUp ? "상승" : "하락") + "했습니다.";
             }
 
+            // 예측 기록 저장
+            predictionLog.push({
+                date: kospiData[currentIndex].date,
+                result: isUp ? "상승" : "하락",
+                userPrediction: prediction,
+                scoreChange: score,
+            });
+            displayPredictionLog();
+
+            // 정확도 계산
+            const accuracy = ((correctPredictions / totalPredictions) * 100).toFixed(2);
+            document.getElementById('accuracy').innerText = `${accuracy}%`;
+
             // 다음 라운드를 위한 값 업데이트
-            currentPrice = nextPrice;
-            priceHistory.push(currentPrice);
-            updateChart();
-            document.getElementById('current-price').innerText = currentPrice;
+            currentIndex = nextIndex;
+            setNewPrice();
             document.getElementById('score').innerText = score;
         }
 
         // 차트 업데이트 함수
         function updateChart() {
-            priceChart.data.labels = Array.from({length: priceHistory.length}, (_, i) => i + 1);
+            priceChart.data.labels = kospiData.slice(0, priceHistory.length).map(d => d.date);
             priceChart.data.datasets[0].data = priceHistory;
             priceChart.data.datasets[1].data = calculateMovingAverage(priceHistory, 5);
             priceChart.update();
@@ -137,6 +195,23 @@
             }
             return movingAverages;
         }
+
+        // 예측 기록 표시 함수
+        function displayPredictionLog() {
+            const logElement = document.getElementById('predictionLog');
+            logElement.innerHTML = predictionLog.map(entry => 
+                `<li>${entry.date} - ${entry.result} 예측: ${entry.userPrediction} (점수 변화: ${entry.scoreChange})</li>`
+            ).join('');
+        }
+
+        // 분석 페이지 토글
+        function toggleAnalysisPage() {
+            const analysisPage = document.getElementById('analysisPage');
+            analysisPage.style.display = analysisPage.style.display === "none" ? "block" : "none";
+        }
+
+        // 초기 데이터 로드
+        setNewPrice();
     </script>
 </body>
 </html>
